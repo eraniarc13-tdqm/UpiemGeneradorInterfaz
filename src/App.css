@@ -1,0 +1,33 @@
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: none !important;
+  border-radius: 15px !important;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+}
+
+.btn-ingresar {
+  background-color: #a3ff71 !important;
+  border: none !important;
+  color: #000 !important;
+  font-weight: bold !important;
+  box-shadow: 0 4px 10px rgba(163, 255, 113, 0.4);
+  transition: all 0.2s;
+}
+
+.btn-ingresar:hover {
+  background-color: #8ce65a !important;
+  transform: scale(1.02);
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
