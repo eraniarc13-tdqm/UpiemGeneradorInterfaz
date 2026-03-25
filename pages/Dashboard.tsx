@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import LineChart from '/Users/eraniarciniefa/Desktop/TT/Interfaz/interfaz/src/components/LineChart.tsx';
+import LineChart from '../src/components/LineChart.tsx';
 
 const Dashboard = () => {
   const [metricaGrande, setMetricaGrande] = useState('rpm');

@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"name": "Savonius_ESP32",
+			"path": "../../../../../Documents/PlatformIO/Projects/Savonius_ESP32"
+		}
+	],
+	"settings": {}
+}
