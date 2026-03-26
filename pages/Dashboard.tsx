@@ -1,27 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import LineChart from '../src/components/LineChart.tsx';
-import mqtt from 'mqtt';
 
 const Dashboard = () => {
   const [metricaGrande, setMetricaGrande] = useState('rpm');
   const [historial, setHistorial] = useState<any[]>([]);
   const [sdActivada, setSdActivada] = useState(false);
+  
+  // 1. Estado para guardar los récords (valores máximos)
+  const [maximos, setMaximos] = useState({
+    rpm: 0,
+    voltaje: 0,
+    corriente: 0,
+    viento: 0,
+    temp: 0
+  });
+
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const client = mqtt.connect("ws://192.168.4.1:8080", {
-      clientId: "React_Savonius_" + Math.random().toString(16).substring(2, 8),
-      username: "Savonius_EKL",
-      password: "EKL12345",
-    });
+    const ws = new WebSocket("ws://192.168.4.1/ws");
+    wsRef.current = ws;
 
-    client.on("connect", () => {
-      console.log("¡Conectado al ESP32!");
-      client.subscribe("savonius/sensores");
-    });
+    ws.onopen = () => console.log("¡Conectado al ESP32!");
 
-    client.on("message", (_topic, message) => {
+    ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(message.toString());
+        const data = JSON.parse(event.data);
         
         const nuevaLectura = {
           rpm: data.rpm || 0,
@@ -31,21 +35,43 @@ const Dashboard = () => {
           temp: data.temp || 0,
           tiempo: new Date().toLocaleTimeString().split(' ')[0]
         };
-        
+
+        // 2. Lógica para actualizar los máximos automáticamente
+        setMaximos(prev => ({
+          rpm: Math.max(prev.rpm, nuevaLectura.rpm),
+          voltaje: Math.max(prev.voltaje, nuevaLectura.voltaje),
+          corriente: Math.max(prev.corriente, nuevaLectura.corriente),
+          viento: Math.max(prev.viento, nuevaLectura.viento),
+          temp: Math.max(prev.temp, nuevaLectura.temp),
+        }));
+
         setHistorial(prev => [...prev, nuevaLectura].slice(-15));
       } catch (error) {
-        console.error("Error al leer el mensaje MQTT:", error);
+        console.error("Error al leer los datos:", error);
       }
-    });
-
-    return () => {
-      client.end();
     };
+
+    return () => ws.close();
   }, []);
 
+  const manejarBotonSD = () => {
+    const nuevoEstado = !sdActivada;
+    setSdActivada(nuevoEstado); 
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(nuevoEstado ? "INICIAR_SD" : "DETENER_SD");
+    }
+  };
+
+  const limpiarHistorial = () => {
+    if(window.confirm("¿Deseas reiniciar las gráficas y los valores máximos?")) {
+      setHistorial([]);
+      setMaximos({ rpm: 0, voltaje: 0, corriente: 0, viento: 0, temp: 0 });
+    }
+  };
+
   const manejarSalir = () => {
-    if(window.confirm("¿Estás seguro de que deseas salir y regresar al inicio?")) {
-      alert("Regresando al Login...");
+    if(window.confirm("¿Estás seguro de que deseas salir?")) {
       window.location.reload(); 
     }
   };
@@ -56,15 +82,7 @@ const Dashboard = () => {
       {/* HEADER */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <button 
-            onClick={manejarSalir}
-            style={{
-              padding: '8px 16px', borderRadius: '8px', border: '1px solid #ddd',
-              background: 'white', cursor: 'pointer', fontWeight: 'bold', color: '#555'
-            }}
-          >
-            ← SALIR
-          </button>
+          <button onClick={manejarSalir} style={estiloBoton}>← SALIR</button>
           <div>
             <h2 style={{ margin: 0, fontSize: '20px' }}>Optimización Savonius</h2>
             <span style={{ color: '#666', fontSize: '13px' }}>Proyecto Terminal | Monitoreo Real</span>
@@ -72,6 +90,7 @@ const Dashboard = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '15px' }}>
+          {/* Indicador de Estado */}
           <div style={{ 
             padding: '8px 15px', borderRadius: '20px', 
             background: sdActivada ? '#e8f5e9' : '#ffebee', 
@@ -80,26 +99,24 @@ const Dashboard = () => {
             border: `1px solid ${sdActivada ? '#2e7d32' : '#c62828'}`
           }}>
             <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: sdActivada ? '#4caf50' : '#f44336' }}></span>
-            {sdActivada ? "SISTEMA ONLINE" : "SISTEMA OFFLINE"}
+            {sdActivada ? "GRABANDO DATOS" : "SISTEMA EN ESPERA"}
           </div>
 
-          <button 
-            onClick={() => setSdActivada(!sdActivada)}
-            style={{ 
-              padding: '8px 15px', borderRadius: '20px', 
-              background: sdActivada ? '#2e7d32' : '#444', 
-              color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold'
-            }}
-          >
-            {sdActivada ? "SD: GRABANDO ●" : "SD: NO DETECTADA"}
+          <button onClick={manejarBotonSD} style={{ ...estiloBotonSD, background: sdActivada ? '#c62828' : '#2e7d32' }}>
+            {sdActivada ? "DETENER SD ■" : "INICIAR SD ●"}
           </button>
+          
+          <button onClick={limpiarHistorial} style={estiloBoton}>RESETEAR ⟲</button>
         </div>
       </header>
 
       {/* GRÁFICA GRANDE */}
-      <div style={{ background: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+      <div style={estiloCardGrande}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <h3 style={{ margin: 0, color: '#444' }}>{metricaGrande.toUpperCase()}</h3>
+          <div>
+            <h3 style={{ margin: 0, color: '#444' }}>{metricaGrande.toUpperCase()}</h3>
+            <span style={{fontSize: '12px', color: '#888'}}>Pico máximo: {maximos[metricaGrande as keyof typeof maximos]}</span>
+          </div>
           <h2 style={{ margin: 0, color: '#333' }}>
             {historial.length > 0 ? historial[historial.length - 1][metricaGrande] : '0.00'}
           </h2>
@@ -109,37 +126,29 @@ const Dashboard = () => {
             label={metricaGrande} 
             dataValues={historial.map(h => h[metricaGrande])} 
             labels={historial.map(h => h.tiempo)}
-            color={
-              metricaGrande === 'rpm' ? '#8bc34a' : 
-              metricaGrande === 'voltaje' ? '#fbc02d' : 
-              metricaGrande === 'corriente' ? '#fb8c00' : 
-              metricaGrande === 'viento' ? '#03a9f4' : '#9c27b0'
-            } 
+            color={obtenerColor(metricaGrande)} 
           />
         </div>
       </div>
 
       {/* GRID DE LAS 5 MINIS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-        <CardMini titulo="RPM" valor="rpm" historial={historial} color="#8bc34a" onClick={() => setMetricaGrande('rpm')} />
-        <CardMini titulo="Voltaje (V)" valor="voltaje" historial={historial} color="#fbc02d" onClick={() => setMetricaGrande('voltaje')} />
-        <CardMini titulo="Corriente (A)" valor="corriente" historial={historial} color="#fb8c00" onClick={() => setMetricaGrande('corriente')} />
-        <CardMini titulo="Vel. Viento (m/s)" valor="viento" historial={historial} color="#03a9f4" onClick={() => setMetricaGrande('viento')} />
-        <CardMini titulo="Temp. Ambiente (°C)" valor="temp" historial={historial} color="#9c27b0" onClick={() => setMetricaGrande('temp')} />
+        <CardMini titulo="RPM" valor="rpm" historial={historial} max={maximos.rpm} color="#8bc34a" onClick={() => setMetricaGrande('rpm')} />
+        <CardMini titulo="Voltaje (V)" valor="voltaje" historial={historial} max={maximos.voltaje} color="#fbc02d" onClick={() => setMetricaGrande('voltaje')} />
+        <CardMini titulo="Corriente (A)" valor="corriente" historial={historial} max={maximos.corriente} color="#fb8c00" onClick={() => setMetricaGrande('corriente')} />
+        <CardMini titulo="Viento (m/s)" valor="viento" historial={historial} max={maximos.viento} color="#03a9f4" onClick={() => setMetricaGrande('viento')} />
+        <CardMini titulo="Temp (°C)" valor="temp" historial={historial} max={maximos.temp} color="#9c27b0" onClick={() => setMetricaGrande('temp')} />
       </div>
     </div>
   );
 };
 
-const CardMini = ({ titulo, valor, historial, color, onClick }: any) => (
-  <div onClick={onClick} style={{ 
-    background: 'white', padding: '12px', borderRadius: '12px', 
-    cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-    transition: 'transform 0.2s'
-  }}
-  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
-  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-    <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#666', fontWeight: 'bold' }}>{titulo}</p>
+// COMPONENTE MINI CARD REUTILIZABLE
+const CardMini = ({ titulo, valor, historial, max, color, onClick }: any) => (
+  <div onClick={onClick} style={estiloCardMini}
+    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+    <p style={{ margin: '0 0 5px 0', fontSize: '11px', color: '#666', fontWeight: 'bold' }}>{titulo}</p>
     <div style={{ height: '60px' }}>
       <LineChart 
         label={valor} 
@@ -148,10 +157,40 @@ const CardMini = ({ titulo, valor, historial, color, onClick }: any) => (
         color={color} 
       />
     </div>
-    <p style={{ margin: '5px 0 0 0', textAlign: 'right', fontWeight: 'bold', fontSize: '15px' }}>
-        {historial.length > 0 ? historial[historial.length - 1][valor] : '0.0'}
-    </p>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '5px' }}>
+        <span style={{fontSize: '9px', color: '#aaa'}}>MAX: {max}</span>
+        <p style={{ margin: 0, fontWeight: 'bold', fontSize: '16px' }}>
+            {historial.length > 0 ? historial[historial.length - 1][valor] : '0.0'}
+        </p>
+    </div>
   </div>
 );
+
+// FUNCIONES DE APOYO Y ESTILOS
+const obtenerColor = (metrica: string) => {
+    const colores: any = { rpm: '#8bc34a', voltaje: '#fbc02d', corriente: '#fb8c00', viento: '#03a9f4', temp: '#9c27b0' };
+    return colores[metrica] || '#444';
+};
+
+const estiloBoton = {
+    padding: '8px 16px', borderRadius: '8px', border: '1px solid #ddd',
+    background: 'white', cursor: 'pointer', fontWeight: 'bold' as const, color: '#555'
+};
+
+const estiloBotonSD = {
+    padding: '8px 15px', borderRadius: '20px', 
+    color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' as const
+};
+
+const estiloCardGrande = {
+    background: 'white', borderRadius: '15px', padding: '20px', 
+    boxShadow: '0 4px 15px rgba(0,0,0,0.05)', marginBottom: '20px'
+};
+
+const estiloCardMini = {
+    background: 'white', padding: '12px', borderRadius: '12px', 
+    cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+    transition: 'transform 0.2s'
+};
 
 export default Dashboard;
