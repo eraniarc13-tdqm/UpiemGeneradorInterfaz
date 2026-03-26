@@ -5,11 +5,15 @@ const Login = ({ onLogin }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password !== '') {
+    
+    if (password === 'EKL12345') {
       onLogin(true);
+    } else if (password === '') {
+      alert('Por favor, ingresa la contraseña.');
     } else {
-      alert('Por favor, ingresa la contraseña de la red ESP32');
-    }
+      alert('Contraseña incorrecta. Intenta de nuevo.');
+      setPassword('');
+    } // <--- FALTABA ESTA LLAVE PARA CERRAR EL ELSE
   };
 
   return (

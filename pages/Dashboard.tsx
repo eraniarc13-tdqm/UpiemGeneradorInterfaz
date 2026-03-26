@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import LineChart from '../src/components/LineChart.tsx';
+import mqtt from 'mqtt';
 
 const Dashboard = () => {
   const [metricaGrande, setMetricaGrande] = useState('rpm');
@@ -7,18 +8,39 @@ const Dashboard = () => {
   const [sdActivada, setSdActivada] = useState(false);
 
   useEffect(() => {
-    const intervalo = setInterval(() => {
-      const nuevaLectura = {
-        rpm: Math.floor(Math.random() * (300 - 200) + 200),
-        voltaje: parseFloat((Math.random() * (14.5 - 12.0) + 12.0).toFixed(2)),
-        corriente: parseFloat((Math.random() * (3.0 - 0.5) + 0.5).toFixed(2)),
-        viento: parseFloat((Math.random() * (15 - 5) + 5).toFixed(2)),
-        temp: parseFloat((Math.random() * (28 - 24) + 24).toFixed(1)),
-        tiempo: new Date().toLocaleTimeString().split(' ')[0]
-      };
-      setHistorial(prev => [...prev, nuevaLectura].slice(-15));
-    }, 1000);
-    return () => clearInterval(intervalo);
+    const client = mqtt.connect("ws://192.168.4.1:8080", {
+      clientId: "React_Savonius_" + Math.random().toString(16).substring(2, 8),
+      username: "Savonius_EKL",
+      password: "EKL12345",
+    });
+
+    client.on("connect", () => {
+      console.log("¡Conectado al ESP32!");
+      client.subscribe("savonius/sensores");
+    });
+
+    client.on("message", (_topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        
+        const nuevaLectura = {
+          rpm: data.rpm || 0,
+          voltaje: data.voltaje || 0,
+          corriente: data.corriente || 0,
+          viento: data.viento || 0,
+          temp: data.temp || 0,
+          tiempo: new Date().toLocaleTimeString().split(' ')[0]
+        };
+        
+        setHistorial(prev => [...prev, nuevaLectura].slice(-15));
+      } catch (error) {
+        console.error("Error al leer el mensaje MQTT:", error);
+      }
+    });
+
+    return () => {
+      client.end();
+    };
   }, []);
 
   const manejarSalir = () => {
