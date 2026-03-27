@@ -59,7 +59,20 @@ const Dashboard = () => {
     setSdActivada(nuevoEstado); 
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(nuevoEstado ? "INICIAR_SD" : "DETENER_SD");
+      if (nuevoEstado) {
+        // --- INICIAR GRABACIÓN CON FECHA ---
+        const ahora = new Date();
+        const fechaFormateada = ahora.getFullYear() + "_" + 
+                               (ahora.getMonth() + 1).toString().padStart(2, '0') + "_" + 
+                               ahora.getDate().toString().padStart(2, '0') + "_" + 
+                               ahora.getHours().toString().padStart(2, '0') + 
+                               ahora.getMinutes().toString().padStart(2, '0');
+        
+        wsRef.current.send(`INICIAR_SD|${fechaFormateada}`);
+      } else {
+        // --- DETENER GRABACIÓN NORMAL ---
+        wsRef.current.send("DETENER_SD");
+      }
     }
   };
 
